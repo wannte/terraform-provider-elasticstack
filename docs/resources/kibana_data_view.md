@@ -165,7 +165,7 @@ Required:
 Optional:
 
 - `allow_no_index` (Boolean) Allows the Data view saved object to exist before the data is available.
-- `field_attrs` (Attributes Map) Map of field attributes by field name. (see [below for nested schema](#nestedatt--data_view--field_attrs))
+- `field_attrs` (Attributes Map) Map of field attributes by field name. Plan-authoritative: the provider does not refresh this attribute from the Kibana API, because Kibana mutates `count` server-side as users interact with Discover and the Data Views update API does not accept `field_attrs`. See [issue #1287](https://github.com/elastic/terraform-provider-elasticstack/issues/1287). (see [below for nested schema](#nestedatt--data_view--field_attrs))
 - `field_formats` (Attributes Map) Map of field formats by field name. (see [below for nested schema](#nestedatt--data_view--field_formats))
 - `id` (String) Saved object ID.
 - `name` (String) The Data view name.

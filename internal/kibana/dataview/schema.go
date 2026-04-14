@@ -26,7 +26,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -105,7 +104,9 @@ func getSchema() schema.Schema {
 						Optional:    true,
 					},
 					"field_attrs": schema.MapNestedAttribute{
-						Description: "Map of field attributes by field name.",
+						MarkdownDescription: "Map of field attributes by field name. Plan-authoritative: the provider does not refresh this attribute " +
+							"from the Kibana API, because Kibana mutates `count` server-side as users interact with Discover and the Data Views " +
+							"update API does not accept `field_attrs`. See [issue #1287](https://github.com/elastic/terraform-provider-elasticstack/issues/1287).",
 						NestedObject: schema.NestedAttributeObject{
 							Attributes: map[string]schema.Attribute{
 								"custom_label": schema.StringAttribute{
@@ -119,9 +120,6 @@ func getSchema() schema.Schema {
 							},
 						},
 						Optional: true,
-						PlanModifiers: []planmodifier.Map{
-							mapplanmodifier.RequiresReplace(),
-						},
 					},
 					"runtime_field_map": schema.MapNestedAttribute{
 						Description: "Map of runtime field definitions by field name.",
