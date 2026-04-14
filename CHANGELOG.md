@@ -2,6 +2,7 @@
 
 ### Changes
 
+- Fix perpetual replacement of `elasticstack_kibana_data_view` caused by Kibana server-side updates to `data_view.field_attrs[<field>].count` (field popularity). The `field_attrs` attribute is now treated as plan-authoritative: it no longer forces resource replacement and is not refreshed from the Kibana API response, so `lifecycle.ignore_changes = [data_view.field_attrs]` workarounds are no longer required. ([#1287](https://github.com/elastic/terraform-provider-elasticstack/issues/1287))
 - Add `elasticstack_kibana_agentbuilder_tool` resource and data source ([#2111](https://github.com/elastic/terraform-provider-elasticstack/pull/2111))
 - Fix state consistency with semantic text types in `elasticstack_elasticsearch_index` ([#2112](https://github.com/elastic/terraform-provider-elasticstack/pull/2112))
 - Add `elasticstack_elasticsearch_inference_endpoint` resource. ([#1955](https://github.com/elastic/terraform-provider-elasticstack/pull/1955))

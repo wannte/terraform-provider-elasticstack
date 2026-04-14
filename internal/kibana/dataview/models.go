@@ -117,14 +117,13 @@ func (model *dataViewModel) populateFromAPI(ctx context.Context, data *kbapi.Dat
 						func(item kbapi.DataViewsSourcefilterItem, _ typeutils.ListMeta) string {
 							return item.Value
 						})),
-				FieldAttributes: semanticEqualEmptyMap(dvInner.FieldAttributes,
-					typeutils.MapToMapType(ctx, schemautil.Deref(item.FieldAttrs), getFieldAttrElemType(), meta.Path.AtName("field_attrs"), &diags,
-						func(item kbapi.DataViewsFieldattrs, _ typeutils.MapMeta) fieldAttrModel {
-							return fieldAttrModel{
-								CustomLabel: types.StringPointerValue(item.CustomLabel),
-								Count:       types.Int64PointerValue(schemautil.Itol(item.Count)),
-							}
-						})),
+				// field_attrs is plan-authoritative. Kibana mutates `count` server-side
+				// as fields are used in Discover, and the Data Views update API does not
+				// accept field_attrs, so refreshing state from the API would create a
+				// perpetual diff and previously forced full replacement (issue #1287).
+				// Preserve whatever the plan/state already carried instead of round-tripping
+				// through the API response.
+				FieldAttributes: preserveFieldAttrs(dvInner.FieldAttributes),
 				RuntimeFieldMap: semanticEqualEmptyMap(dvInner.RuntimeFieldMap,
 					typeutils.MapToMapType(ctx, schemautil.Deref(item.RuntimeFieldMap), getRuntimeFieldMapElemType(), meta.Path.AtName("runtime_field_map"), &diags,
 						func(item kbapi.DataViewsRuntimefieldmap, _ typeutils.MapMeta) runtimeFieldModel {
@@ -314,6 +313,17 @@ func convertRuntimeFieldMap(item runtimeFieldModel, _ typeutils.MapMeta) kbapi.D
 
 func convertSourceFilter(item string, _ typeutils.ListMeta) kbapi.DataViewsSourcefilterItem {
 	return kbapi.DataViewsSourcefilterItem{Value: item}
+}
+
+// preserveFieldAttrs returns the existing plan/state value for field_attrs,
+// or a typed null map when that value is unknown. The provider intentionally
+// does not mirror field_attrs from the Kibana Data Views API; see the
+// MapNestedAttribute description on `field_attrs` in schema.go for details.
+func preserveFieldAttrs(existing types.Map) types.Map {
+	if !typeutils.IsKnown(existing) {
+		return types.MapNull(getFieldAttrElemType())
+	}
+	return existing
 }
 
 func (model dataViewModel) getViewIDAndSpaceID() (viewID string, spaceID string) {

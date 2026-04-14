@@ -94,12 +94,10 @@ func TestPopulateFromAPI(t *testing.T) {
 					ID:            types.StringValue("id"),
 					TimeFieldName: types.StringValue("time_field_name"),
 					SourceFilters: typeutils.ListValueFrom(ctx, []string{"field1", "field2"}, types.StringType, path.Root("data_view").AtName("source_filters"), &diags),
-					FieldAttributes: typeutils.MapValueFrom(ctx, map[string]fieldAttrModel{
-						"field1": {
-							CustomLabel: types.StringValue("custom_label"),
-							Count:       types.Int64Value(10),
-						},
-					}, getFieldAttrElemType(), path.Root("data_view").AtName("field_attrs"), &diags),
+					// field_attrs is intentionally preserved from the existing model
+					// (MapNull here) and NOT refreshed from the API response, even though
+					// the response carries field1 with Count=10. See issue #1287.
+					FieldAttributes: types.MapNull(getFieldAttrElemType()),
 					RuntimeFieldMap: typeutils.MapValueFrom(ctx, map[string]runtimeFieldModel{
 						"runtime_field": {
 							Type:         types.StringValue("keyword"),
@@ -114,6 +112,99 @@ func TestPopulateFromAPI(t *testing.T) {
 					}, getFieldFormatElemType(), path.Root("data_view").AtName("field_formats"), &diags),
 					AllowNoIndex: types.BoolValue(true),
 					Namespaces:   typeutils.ListValueFrom(ctx, []string{"existing-namespace"}, types.StringType, path.Root("data_view").AtName("namespaces"), &diags),
+				}, getDataViewAttrTypes(), path.Root("data_view"), &diags),
+			},
+		},
+		{
+			// Regression for https://github.com/elastic/terraform-provider-elasticstack/issues/1287:
+			// Kibana returns server-populated field_attrs (popularity counts) on read,
+			// but that drift must not reach Terraform state — otherwise every subsequent
+			// plan shows a diff and, with the former RequiresReplace modifier, forced
+			// a destructive replace that broke dependent saved objects.
+			name: "field_attrs_preserved_against_server_drift",
+			existingModel: dataViewModel{
+				ID:      types.StringValue("default/id"),
+				SpaceID: types.StringValue("default"),
+				DataView: typeutils.ObjectValueFrom(ctx, &innerModel{
+					ID:              types.StringValue("id"),
+					SourceFilters:   types.ListNull(types.StringType),
+					FieldAttributes: types.MapNull(getFieldAttrElemType()),
+					RuntimeFieldMap: types.MapNull(getRuntimeFieldMapElemType()),
+					FieldFormats:    types.MapNull(getFieldFormatElemType()),
+					Namespaces:      typeutils.ListValueFrom[string](ctx, nil, types.StringType, path.Root("data_view").AtName("namespaces"), &diags),
+				}, getDataViewAttrTypes(), path.Root("data_view"), &diags),
+			},
+			response: kbapi.DataViewsDataViewResponseObject{
+				DataView: &kbapi.DataViewsDataViewResponseObjectInner{
+					Id:         new("id"),
+					Namespaces: &[]string{"default"},
+					FieldAttrs: &map[string]kbapi.DataViewsFieldattrs{
+						"host.hostname": {Count: new(5)},
+						"event.action":  {Count: new(12)},
+					},
+				},
+			},
+			expectedModel: dataViewModel{
+				ID:      types.StringValue("default/id"),
+				SpaceID: types.StringValue("default"),
+				DataView: typeutils.ObjectValueFrom(ctx, &innerModel{
+					ID:              types.StringValue("id"),
+					SourceFilters:   types.ListNull(types.StringType),
+					FieldAttributes: types.MapNull(getFieldAttrElemType()),
+					RuntimeFieldMap: types.MapNull(getRuntimeFieldMapElemType()),
+					FieldFormats:    types.MapNull(getFieldFormatElemType()),
+					Namespaces:      typeutils.ListValueFrom[string](ctx, nil, types.StringType, path.Root("data_view").AtName("namespaces"), &diags),
+				}, getDataViewAttrTypes(), path.Root("data_view"), &diags),
+			},
+		},
+		{
+			// When the plan/state already sets field_attrs, the provider must keep
+			// that value rather than overwrite it with whatever Kibana returned.
+			name: "field_attrs_plan_value_preserved",
+			existingModel: dataViewModel{
+				ID:      types.StringValue("default/id"),
+				SpaceID: types.StringValue("default"),
+				DataView: typeutils.ObjectValueFrom(ctx, &innerModel{
+					ID:            types.StringValue("id"),
+					SourceFilters: types.ListNull(types.StringType),
+					FieldAttributes: typeutils.MapValueFrom(ctx, map[string]fieldAttrModel{
+						"field1": {
+							CustomLabel: types.StringValue("plan_label"),
+							Count:       types.Int64Null(),
+						},
+					}, getFieldAttrElemType(), path.Root("data_view").AtName("field_attrs"), &diags),
+					RuntimeFieldMap: types.MapNull(getRuntimeFieldMapElemType()),
+					FieldFormats:    types.MapNull(getFieldFormatElemType()),
+					Namespaces:      typeutils.ListValueFrom[string](ctx, nil, types.StringType, path.Root("data_view").AtName("namespaces"), &diags),
+				}, getDataViewAttrTypes(), path.Root("data_view"), &diags),
+			},
+			response: kbapi.DataViewsDataViewResponseObject{
+				DataView: &kbapi.DataViewsDataViewResponseObjectInner{
+					Id:         new("id"),
+					Namespaces: &[]string{"default"},
+					FieldAttrs: &map[string]kbapi.DataViewsFieldattrs{
+						"field1": {
+							CustomLabel: new("server_label_differs"),
+							Count:       new(99),
+						},
+					},
+				},
+			},
+			expectedModel: dataViewModel{
+				ID:      types.StringValue("default/id"),
+				SpaceID: types.StringValue("default"),
+				DataView: typeutils.ObjectValueFrom(ctx, &innerModel{
+					ID:            types.StringValue("id"),
+					SourceFilters: types.ListNull(types.StringType),
+					FieldAttributes: typeutils.MapValueFrom(ctx, map[string]fieldAttrModel{
+						"field1": {
+							CustomLabel: types.StringValue("plan_label"),
+							Count:       types.Int64Null(),
+						},
+					}, getFieldAttrElemType(), path.Root("data_view").AtName("field_attrs"), &diags),
+					RuntimeFieldMap: types.MapNull(getRuntimeFieldMapElemType()),
+					FieldFormats:    types.MapNull(getFieldFormatElemType()),
+					Namespaces:      typeutils.ListValueFrom[string](ctx, nil, types.StringType, path.Root("data_view").AtName("namespaces"), &diags),
 				}, getDataViewAttrTypes(), path.Root("data_view"), &diags),
 			},
 		},
